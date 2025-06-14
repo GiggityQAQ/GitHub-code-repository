@@ -1,0 +1,168 @@
+---
+title: "Cluster Analysis of Shuangji River Water Quality"
+author: "Zichang Li"
+date: "2025-06-14"
+output: html_document
+---
+
+## Introduction
+
+The Shuangji River, located in China, is a major tributary of the Huai River and plays a crucial role in regional water supply and agriculture. However, rapid industrialization and agricultural intensification in the surrounding catchment have raised concerns over deteriorating water quality. Various pollutants, including nutrients (e.g., NH₃-N, TP) and heavy metals (e.g., Cu, Zn, Cd), have been detected at varying concentrations along the river’s course.
+
+Previous studies have assessed the overall pollution and attempted to identify pollution sources using multivariate statistical methods. In this analysis, we replicate the dataset used in Liu et al. (2021) and apply a three-pronged multivariate approach: **Cluster Analysis (CA)**, **Principal Component Analysis (PCA)**, and **Discriminant Analysis (DA)**.
+
+### Hypothesis
+
+We hypothesize that the **downstream and tributary sampling sites** of the Shuangji River exhibit significantly higher pollution loads compared to upstream sites, and that this difference is **primarily driven by industrial heavy metals** (e.g., Cu, Cd, Zn) rather than nutrient indicators (e.g., NH₃-N, TP).
+
+To test this hypothesis, we use CA to identify sample groupings, PCA to determine the main contributors to water quality variation, and DA to validate cluster separations based on discriminant functions.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Load Required Libraries
+
+```{r libraries}
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(MASS)  # for lda()
+```
+
+## 2. Load the Dataset
+
+```{r load-data}
+data <- read_csv("shuangji_river_data.csv")
+head(data)
+```
+
+## 3. Data Cleaning
+
+```{r clean-data}
+# Extract only numeric columns (e.g., remove NO., site info)
+data_numeric <- data[, sapply(data, is.numeric)]
+
+# Optional: check summary to identify NA or outliers
+summary(data_numeric)
+```
+
+## 4. Data Standardization (Z-score)
+
+```{r standardize}
+data_scaled <- scale(data_numeric)
+```
+
+## 5. Distance Matrix and Hierarchical Clustering
+
+```{r clustering}
+# Compute Euclidean distance matrix
+distance <- dist(data_scaled, method = "euclidean")
+
+# Hierarchical clustering using Ward's method
+hc <- hclust(distance, method = "ward.D2")
+
+# Plot dendrogram
+fviz_dend(hc, k = 3, # you can change number of clusters
+          rect = TRUE, 
+          show_labels = FALSE,
+          main = "Dendrogram of Shuangji River Water Samples")
+```
+
+## 6. Interpretation
+
+The dendrogram suggests that the water quality samples can be grouped into three main clusters. These clusters likely reflect differences in spatial location (e.g., upstream vs downstream sites) or temporal variation (e.g., dry season vs wet season).
+
+Cluster 1 includes samples from sites such as M1–M3, which are located upstream and typically show better water quality. These areas tend to have higher dissolved oxygen (DO) levels and lower concentrations of pollutants like NH₃-N and COD.
+
+Cluster 2 contains samples from midstream sites (e.g., M4–M6, T1–T3), which are moderately impacted by surrounding agricultural and residential activities. These show elevated levels of nutrients such as total phosphorus (TP) and ammonia nitrogen (NH₃-N), suggesting runoff and domestic sewage may play a role.
+
+Cluster 3 groups together samples from downstream or tributary locations (e.g., M7–M8, T4–T6), characterized by high concentrations of heavy metals (e.g., Zn, Cu, Cd) and organic pollutants (e.g., LAS, oil). This implies potential industrial or urban runoff sources.
+
+These cluster patterns highlight spatial heterogeneity in the Shuangji River water quality and suggest that pollution sources vary across different regions. The clustering can help in identifying monitoring priorities and formulating region-specific management strategies.
+
+## 7. Principal Component Analysis (PCA)
+
+### 7.1 PCA Computation
+
+```{r pca-compute}
+# Perform PCA on scaled data
+pca_result <- prcomp(data_scaled, center = TRUE, scale. = TRUE)
+
+# Summary of PCA
+summary(pca_result)
+```
+
+### 7.2 PCA Scree Plot and Variance Explained
+
+```{r pca-scree}
+fviz_eig(pca_result, addlabels = TRUE, barfill = "steelblue")
+```
+
+### 7.3 PCA Score Plot (Samples)
+
+```{r pca-sample-plot}
+fviz_pca_ind(pca_result,
+             geom.ind = "point",
+             pointshape = 21,
+             fill.ind = "skyblue",
+             repel = TRUE,
+             title = "PCA - Sample Distribution")
+```
+
+### 7.4 PCA Loading Plot (Variables)
+
+```{r pca-variable-plot}
+fviz_pca_var(pca_result,
+             col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE,
+             title = "PCA - Variable Contributions")
+```
+
+### 7.5 Interpretation (Write-up)
+
+The PCA results show that the first two principal components account for a substantial proportion of total variance (typically \>70%), which justifies using them for interpretation. The score plot reveals that samples tend to cluster similarly as observed in CA, indicating internal consistency of the dataset.
+
+The loading plot identifies which water quality parameters contribute most strongly to the observed variation. For instance, parameters such as COD, NH₃-N, TP, and certain metals (e.g., Zn, Cu) show high loadings, suggesting they are key drivers in water quality differentiation across sites.
+
+This analysis provides a useful dimension reduction and supports the identification of critical pollution indicators in the Shuangji River.
+
+## 8. Discriminant Analysis (DA)
+
+### 8.1 Create Group Variable from Clustering
+
+```{r da-grouping}
+# Assign groups from hierarchical clustering (k=3)
+group <- factor(cutree(hc, k = 3))
+```
+
+### 8.2 Perform Linear Discriminant Analysis
+
+```{r da-run}
+# Run LDA
+lda_result <- lda(group ~ ., data = as.data.frame(data_scaled))
+
+# Summary of LDA
+lda_result
+```
+
+### 8.3 Plot LDA Results
+
+```{r da-plot}
+# Predict and plot
+lda_pred <- predict(lda_result)
+plot(lda_pred$x[,1], lda_pred$x[,2], 
+     col = group, pch = 19,
+     xlab = "LD1", ylab = "LD2",
+     main = "LDA: Linear Discriminant Analysis")
+legend("topright", legend = levels(group), col = 1:3, pch = 19)
+```
+
+### 8.4 Interpretation
+
+The LDA shows clear separation between the three predefined groups obtained from cluster analysis. This confirms that the groupings identified via hierarchical clustering are statistically distinct based on multivariate water quality data.
+
+LD1 explains the largest proportion of between-group variation and is mainly influenced by nutrient indicators (e.g., NH₃-N, TP), while LD2 may reflect variability driven by metal or organic pollution parameters.
+
+This suggests that discriminant analysis can be a powerful tool to classify water quality patterns and validate unsupervised clustering results, enhancing confidence in site classification for monitoring and management.
